@@ -1,0 +1,431 @@
+<!doctype html>
+
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <title>Rainfall for Soybean-Producing Counties</title>
+  <meta name="description" content="Rainfall for Soybean-Producing Counties">
+  <meta name="author" content="Farhan Kathawala">
+  
+  <style>
+   body {
+       background-color: #1d1f20;
+       color: #f6f6f6;
+       font-family: "Roboto", helvetica, arial, sans-serif;
+       font-size: 16px;
+       font-weight: 400;
+       text-rendering: optimizeLegibility;
+   }
+   .firstdiv {
+       display: inline-flex;
+       padding-top: 20px;
+       width: 100%;
+   }
+   .showingcounties {
+       stroke: #565656;
+       stroke-width: 0.3;
+   }
+   .showingcounties:hover {
+       opacity: 0.6;
+       stroke: #abaaaa;
+       stroke-width: 0.5;
+   }
+   .notshowingcounties {
+       fill: none;
+   }
+   #statsbox {
+       padding-left: 10px;
+       width: 40vw;
+   }
+   .name {
+       font-family: Lato,'Helvetica Neue',Arial,Helvetica,sans-serif;
+       font-size: 1.3rem !important;
+       font-weight: 200;
+   }
+
+   .stat {
+       font-family: Lato,'Helvetica Neue',Arial,Helvetica,sans-serif;
+       font-size: 4rem !important;
+       font-weight: 400;
+       line-height: 1em;
+       text-transform: uppercase;
+   }
+
+   p {
+       margin-top: 0px;
+       margin-bottom: 5px;
+   }
+   
+   /* got this from a nicely formatted data table online */
+   /* lots of tweaks to it though */
+   /* https://codepen.io/lukepeters/pen/bfFur */
+   .wrapper {
+       margin: 0 auto;
+       padding: 40px;
+       display: inline-grid;
+       float: right;
+   }
+   
+   .table {
+       margin: 0 0 40px 0;
+       width: 100%;
+       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+       display: block;
+       overflow-y: scroll;
+       white-space: nowrap;
+       max-height: 70vh;
+   }
+
+   .row {
+       display: table-row;
+       background: #f6f6f6;
+       color: #3b3b3b;
+   }
+   .row:nth-of-type(odd) {
+       background: #e9e9e9;
+   }
+   .row-header {
+       display: table-row;
+       /* white-space: nowrap; */
+       background: #f6f6f6;
+       color: #3b3b3b;
+       font-weight: 900;
+       color: #f6f6f6;
+       background: #ea6153;
+   }
+   .row.green {
+       background: #27ae60;
+   }
+   .row.blue {
+       background: #2980b9;
+   }
+   @media screen and (max-width: 580px) {
+       .row {
+	   padding: 8px 0;
+	   display: block;
+       }
+   }
+
+   .cell {
+       padding: 6px 12px;
+       display: table-cell;
+   }
+   @media screen and (max-width: 580px) {
+       .cell {
+	   padding: 2px 12px;
+	   display: block;
+       }
+   }
+  </style>
+  
+</head>
+
+<body>
+    <div class="firstdiv">
+	<svg id="mainmap" width="60%" height="600" xmlns="http://www.w3.org/2000/svg"></svg>
+	<div id="statsbox">
+	    <div class="wrapper">
+		<p class="name" id="name">Location</p>
+		<p class="stat" id="soybean_production">0.0</p>
+		<p>soybeans grown (measured per 1 million BU)</p>		
+
+		<div id="datatable" class="table">
+		    <div class="row-header">
+			<div class="cell">
+			    State
+			</div>
+			<div class="cell">
+			    County
+			</div>
+			<div class="cell">
+			    Soybean Production
+			</div>
+		    </div>		    
+		</div>
+	    </div>
+	</div>
+    </div>
+    <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+    <script src="https://d3js.org/topojson.v2.min.js"></script>
+    <script>
+
+     // formatted like following
+     // {
+     //    states: {
+     //       "xxxx": {
+     //            name: "nameinletters"
+     //            production: "production by million BU"
+     //       }
+     //    }
+     //    counties: {
+     //       "yyyy": {
+     //            name: "nameinletters"
+     //            production: "production by million BU"
+     //       }
+     //    }
+     // }
+     var dataObj = {"states": {}, "counties": {}};
+
+     function capsToProperNoun(str) {
+	 words = str.split(" ")
+	 result = [];
+	 words.forEach(function(w) {
+	     w = w.toLowerCase();
+	     w = w.charAt(0).toUpperCase() + w.slice(1);
+	     result.push(w);
+	 });
+	 return result.join(" ");
+     }
+
+     function isStateFIPS(id) {
+	 return id.length == 2;
+     }
+
+     function removeElementsByClassName(name) {
+	 var deletedRows = document.getElementsByClassName(name);
+	 while(deletedRows.length > 0){
+             deletedRows[0].parentNode.removeChild(deletedRows[0]);
+	 }
+     }
+     
+     function fillTable(data) {
+
+	 removeElementsByClassName("row")
+	 
+	 var rows = d3.select('#datatable')
+		      .selectAll('div.row')
+		      .data(data).enter()
+		      .append("div")
+		      .attr("class", "row");
+
+	 rows.append("div")
+	     .attr("class", "cell first")
+	     .html(function(d) {
+		 if (isStateFIPS(d)) {
+		     return capsToProperNoun(dataObj["states"][d].state_name);
+		 } else {
+		     return capsToProperNoun(dataObj["counties"][d].state_name);
+		 }
+	     });
+	 rows.insert("div")
+	     .attr("class", "cell second")
+	     .html(function(d) {
+		 if (isStateFIPS(d)) {
+		     return capsToProperNoun(dataObj["states"][d].county_name);
+		 } else {
+		     return capsToProperNoun(dataObj["counties"][d].county_name);
+		 }
+	     });
+	 rows.insert("div")
+	     .attr("class", "cell third")
+	     .html(function(d) {
+		 if (isStateFIPS(d)) {
+		     return dataObj["states"][d].production		     
+		 } else {
+		     return dataObj["counties"][d].production
+		 }
+	     });
+     }
+
+     function filterDataTable(filter_id=null) {
+	 if (filter_id == null) {
+	     
+	     var data = Object.keys(dataObj["states"]);
+
+	 } else {
+	     var matching_states = Object.keys(dataObj["states"]).filter(function(k) {
+		 return k == filter_id; 
+	     });
+	     var matching_counties = Object.keys(dataObj["counties"]).filter(function(k) {
+		 return k.substring(0,2) == filter_id; 
+	     });
+
+	     var data = matching_states;
+
+	     matching_counties.forEach(function(val) {
+		 data.push(val);
+	     });
+
+	     // sorting in ascending order of soybean production value
+	     data.sort(function(a,b) {
+		 var a_value = isStateFIPS(a) ? dataObj["states"][a].production : dataObj["counties"][a].production;
+		 var b_value = isStateFIPS(b) ? dataObj["states"][b].production : dataObj["counties"][b].production;
+		 return Number(b_value)-Number(a_value);
+	     });
+
+	 }
+
+	 fillTable(data);
+     }
+
+     function handleStateStats(error, soybeans) {
+	 soybeans.forEach(function(obj) {
+	     var soybean_production = obj.Value.replace(/,/g , '');
+	     var soybean_production_by_mil = soybean_production / 1000000;
+	     var id = obj.state_fips_code;
+	     var name = obj.state_name;
+	     if (name == "OTHER STATES") {
+		 return
+	     }
+	     dataObj["states"][id] = {
+		 name: name,
+		 state_name: name,
+		 county_name: "",
+		 production: soybean_production_by_mil
+	     }
+	 });
+     }
+
+     function handleCountyStats(error, soybeans) {
+	 soybeans.forEach(function(obj) {
+	     var soybean_production = obj.Value.replace(/,/g , '');
+	     var soybean_production_by_mil = soybean_production / 1000000;
+	     var id = obj.state_fips_code + obj.county_ansi;
+	     if (obj.county_ansi == "") {
+		 return
+	     }
+	     var name = obj.county_name + " COUNTY, " + obj.state_name;
+	     dataObj["counties"][id] = {
+		 name: name,
+		 state_name: obj.state_name,
+		 county_name: obj.county_name + " COUNTY",
+		 production: soybean_production_by_mil
+	     }
+	 });
+	 
+	 filterDataTable();
+     }
+     
+     var queue = d3.queue();
+     queue.defer(d3.json, "soybean-state.json", handleStateStats);
+     queue.defer(d3.json, "soybean-county.json", handleCountyStats);
+
+     function fillInfoBox(id, isState=false) {
+	 var namebox = document.getElementById("name"),
+	     soybean_prod_box = document.getElementById("soybean_production");
+
+	 var level = isState ? "states" : "counties";
+	 
+	 namebox.innerHTML = dataObj[level][id].name;
+	 var numeric_soy_prod = dataObj[level][id].production;
+	 numeric_soy_prod = numeric_soy_prod.toFixed(3);
+	 soybean_prod_box.innerHTML = numeric_soy_prod;
+     }
+     
+     d3.json("us-10m.json", function(error, us) {
+	 if (error)
+	     console.log("Something went wrong! Oops :(");
+
+	 var svg = d3.select("#mainmap");
+	 var path = d3.geoPath();
+
+	 var color = d3.scaleQuantile()
+		       .domain(d3.range(-20,60))
+		       .range(d3.schemeGreens[9]);
+
+	 // draw the individual states first
+	 svg.append("g")
+	    .attr("class", "states")
+	    .selectAll("path")
+	    .data(topojson.feature(us, us.objects.states).features)
+	    .enter()
+	    .append("path")
+	    .attr("id", function(d) { return "st-" + d.id; })
+	 .attr("class", "state")
+	    .attr("d", path)
+	    .attr("stroke", "#565656")
+	    .attr("stroke-width", "0.6")
+	 // this ugliness below can be cleaned up by throwing it in a css class
+	 // and setting that class here instead
+	    .attr("fill", function(d) {
+		/* if (stats.has(d.id)) {*/
+		if (dataObj["states"].hasOwnProperty(d.id)) {
+		    return color(Value = dataObj["states"][d.id].production / 10);
+		}
+		return "#999999";
+	    })
+	    .attr("cursor", function(d) {
+		if (!dataObj["states"].hasOwnProperty(d.id)) {
+		    return "not-allowed";
+		}
+		return "auto";
+	    })
+	 /* .attr("fill", "#2e4aff")*/
+	    .on("mouseover", function(d,i) {
+		if (!dataObj["states"].hasOwnProperty(d.id)) {
+		    return;
+		}
+		d3.select(this)
+		  .transition()
+		  .duration(100)
+		  .style("opacity", 0.8);
+		fillInfoBox(d.id, isState=true);
+	    })
+	    .on("mouseout", function(d,i) {
+		d3.select(this)
+		  .transition()
+		  .duration(100)
+		  .style("opacity", 1);
+	    })
+	    .on("click", function(d,i) {
+		d3.selectAll(".ct-"+d.id)
+		  .classed("showingcounties", function (c,i) {
+		      return !d3.select(this).classed("showingcounties");
+		  })
+		  .classed("notshowingcounties", function (c,i) {
+		      return !d3.select(this).classed("notshowingcounties");
+		  })
+		  .attr("fill", function(c) {
+		      var id = this.id;
+		      if (dataObj["counties"].hasOwnProperty(id)) {
+			  return color(Value = dataObj["counties"][id].production)
+		      }
+		      return "#999999";
+		  });
+		filterDataTable(d.id);
+	    });
+	 
+	 // drawing the country boundary
+	 svg.append("g").append("path")
+	    .attr("d", path(topojson.feature(us, us.objects.nation)))
+	    .attr("stroke", "#000")
+	    .attr("fill", "none");
+
+	 /* now the county boundaries*/
+	 svg.append("g")
+	    .attr("class", "counties")
+	    .selectAll("path")
+	    .data(topojson.feature(us, us.objects.counties).features)
+	    .enter()
+	    .append("path")
+	    .attr("class", function(d) { return "ct-" + d.id.substring(0,2) + " notshowingcounties"})
+	    .attr("id", function(d) { return d.id })
+	    .attr("d", path)
+	    .attr("fill", "none")
+	    .on("click", function(d,i) {
+		d3.selectAll(".ct-"+d.id.substring(0,2))
+		  .classed("showingcounties", function (c,i) {
+		      return !d3.select(this).classed("showingcounties");
+		  })
+		  .classed("notshowingcounties", function (c,i) {
+		      return !d3.select(this).classed("notshowingcounties");
+		  })
+		  .attr("fill", function(c) {
+		      var id = this.id;
+		      if (dataObj["counties"].hasOwnProperty(id)) {
+			  return color(Value = dataObj["counties"][id].production)
+		      }
+		      return "#999999";
+		  });
+	    })
+	    .on("mouseover", function(d,i) {
+		if (dataObj["counties"].hasOwnProperty(d.id) && this.classList.contains("showingcounties")) {
+		    fillInfoBox(this.id, isState=false);
+		}
+	    });
+     });
+    </script>
+</body>
+</html>
